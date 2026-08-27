@@ -45,6 +45,10 @@ MAP_B = {
 }
 MAP_B_INV = {v: k for k, v in MAP_B.items()}
 
+# Columnas válidas que existen en la tabla SQL
+SQL_COLS_F = set(MAP_F.keys())
+SQL_COLS_B = set(MAP_B.keys())
+
 def get_supa():
     url = st.secrets.get("SUPABASE_URL", "")
     key = st.secrets.get("SUPABASE_KEY", "")
@@ -86,11 +90,15 @@ def guardar_datos(df_f, df_b):
     if not supa:
         return False, "Sin credenciales Supabase"
     try:
+        # Limpiar espacios en nombres de columna del Excel
+        df_f = df_f.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
+        df_b = df_b.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
+        # Renombrar Excel → SQL
         df_fs = df_f.rename(columns=MAP_F_INV)
         df_bs = df_b.rename(columns=MAP_B_INV)
-        exc = ["id", "created_at", "updated_at"]
-        cols_f = [c for c in df_fs.columns if c not in exc]
-        cols_b = [c for c in df_bs.columns if c not in exc]
+        # SOLO columnas que existen en la tabla SQL
+        cols_f = [c for c in df_fs.columns if c in SQL_COLS_F]
+        cols_b = [c for c in df_bs.columns if c in SQL_COLS_B]
         for _, row in df_fs[cols_f].iterrows():
             d = {k: safe_val(v) for k, v in row.items()}
             supa.table("formato").upsert(d).execute()
