@@ -1,4 +1,5 @@
 import streamlit as st
+from config import COLOR_CARD, COLOR_ACCENT, COLOR_SEC
 
 def verificar_login():
     if "logged" not in st.session_state:
