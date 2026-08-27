@@ -20,43 +20,21 @@ st.markdown("""<style>
 .sidebar .stButton>button{background:#0D6EFD;color:white;font-weight:bold;border-radius:8px;width:100%;border:none;}
 .sidebar .stButton>button:hover{background:#0B5ED7;}
 .block-container{padding-top:2rem;max-width:1400px;}
-div[data-testid="stMetric"]{background:white;border:1px solid #DEE2E6;border-radius:10px;padding:12px;}
 </style>""", unsafe_allow_html=True)
 
 if not verificar_login():
     mostrar_login()
     st.stop()
 
+# Sidebar limpio: solo rol y logout
 with st.sidebar:
     rol = st.session_state.get("rol", "consultor")
     icon = "👑" if rol == "admin" else "👁️"
     st.markdown(f"### {icon} Rol: **{rol.upper()}**")
     st.markdown("---")
     logout()
-    if es_admin():
-        st.markdown("---")
-        st.markdown("#### 📁 Cargar Datos")
-        archivo = st.file_uploader("Subir Excel", type=["xlsx"], key="up")
-        if archivo:
-            try:
-                xl = pd.ExcelFile(archivo)
-                nf = pd.read_excel(xl, "FORMATO") if "FORMATO" in xl.sheet_names else pd.DataFrame()
-                nb = pd.read_excel(xl, "BASE DATOS") if "BASE DATOS" in xl.sheet_names else pd.DataFrame()
-                if nf.empty and nb.empty:
-                    st.error("❌ Hojas FORMATO o BASE DATOS no encontradas")
-                else:
-                    ok, msg = guardar_datos(nf, nb)
-                    if ok:
-                        st.success(msg)
-                        st.session_state.df_f, st.session_state.df_b = cargar_datos()
-                    else:
-                        st.error(msg)
-            except Exception as e:
-                st.error(f"❌ {e}")
-        if st.button("🔄 Recargar de Supabase"):
-            st.session_state.df_f, st.session_state.df_b = cargar_datos()
-            st.rerun()
 
+# Cargar datos desde Supabase
 if "df_f" not in st.session_state:
     st.session_state.df_f, st.session_state.df_b = cargar_datos()
 df_f, df_b = st.session_state.df_f, st.session_state.df_b
@@ -66,9 +44,10 @@ st.markdown("<p style='color:#6C757D;text-align:center;'>Análisis integral de S
 st.markdown("<hr style='border-color:#DEE2E6;'>", unsafe_allow_html=True)
 
 if df_f.empty:
-    st.warning("⚠️ No hay datos cargados en el sistema.")
     if es_admin():
-        st.info("📁 Sube el archivo CARACTERIZACION ACCIDENTALIDAD.xlsx desde el panel lateral.")
+        st.warning("⚠️ No hay datos. Ve a ⚙️ Administrador para cargar el archivo Excel.")
+    else:
+        st.warning("⚠️ No hay datos cargados en el sistema. Contacte al administrador.")
     st.stop()
 
 FF = "FECHA DEL EVENTO"
@@ -94,19 +73,15 @@ with t1:
             kpi(cnt("enfermedad"),"Enf. Laborales",COLOR_WARNING), kpi(cnt("incidente"),"Incidentes",COLOR_INFO)]
     st.markdown(f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:16px;'>{''.join(kpis)}</div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-    for g_fn, g_col in [(g_dia_semana,FD),(g_tipo_anual,FT),(g_servicio,FA),(g_cie10,FC),
-                         (g_top5,FI),(g_tendencia,FF),(g_agente,FAG),(g_cuerpo,FCU),
-                         (g_naturaleza,FNA),(g_estado,FE)]:
-        c1, c2 = st.columns(2)
-        with c1:
-            args = [df_f, g_col] if g_fn not in [g_tipo_anual, g_tendencia, g_top5, g_estado] else [df_f]
-            if g_fn == g_tipo_anual: args = [df_f, FT, FF]
-            elif g_fn == g_tendencia: args = [df_f, FF]
-            elif g_fn == g_top5: args = [df_f, FI]
-            g = g_fn(*args)
-            if g: st.plotly_chart(g, use_container_width=True)
-        with c2:
-            break
+
+    c1, c2 = st.columns(2)
+    with c1:
+        g = g_dia_semana(df_f, FD)
+        if g: st.plotly_chart(g, use_container_width=True)
+    with c2:
+        g = g_tipo_anual(df_f, FT, FF)
+        if g: st.plotly_chart(g, use_container_width=True)
+
     c3, c4 = st.columns(2)
     with c3:
         g = g_servicio(df_f, FA)
@@ -114,6 +89,7 @@ with t1:
     with c4:
         g = g_cie10(df_f, FC)
         if g: st.plotly_chart(g, use_container_width=True)
+
     c5, c6 = st.columns(2)
     with c5:
         g = g_top5(df_f, FI)
@@ -121,6 +97,7 @@ with t1:
     with c6:
         g = g_tendencia(df_f, FF)
         if g: st.plotly_chart(g, use_container_width=True)
+
     c7, c8 = st.columns(2)
     with c7:
         g = g_agente(df_f, FAG)
@@ -128,6 +105,7 @@ with t1:
     with c8:
         g = g_cuerpo(df_f, FCU)
         if g: st.plotly_chart(g, use_container_width=True)
+
     c9, c10 = st.columns(2)
     with c9:
         g = g_naturaleza(df_f, FNA)
@@ -135,6 +113,7 @@ with t1:
     with c10:
         g = g_estado(df_f, FE)
         if g: st.plotly_chart(g, use_container_width=True)
+
     st.markdown(f"<h3 style='color:#0D6EFD;'>💡 Recomendaciones IA</h3>", unsafe_allow_html=True)
     if st.button("🎯 Generar Recomendaciones", use_container_width=True):
         with st.spinner("Analizando..."):
@@ -143,7 +122,6 @@ with t1:
 
 with t2:
     st.markdown("<h2 style='color:#0D6EFD;'>🔍 Consulta por Trabajador</h2>", unsafe_allow_html=True)
-    # CONSULTA RÁPIDA AT
     st.markdown("---")
     st.markdown("#### ⚡ Consulta Rápida — ¿Sufrió Accidente de Trabajo?")
     cid = st.text_input("Identificación del trabajador", placeholder="Ej: 1234567890", key="qr")
@@ -152,20 +130,15 @@ with t2:
         eventos = df_f[mask]
         ats = eventos[eventos[FT].astype(str).str.contains("accidente", case=False, na=False)] if FT in eventos.columns and not eventos.empty else pd.DataFrame()
         if ats.empty:
-            st.markdown("""<div style="background:#D1E7DD;color:#0F5132;padding:16px;border-radius:10px;
-            font-size:16px;font-weight:bold;text-align:center;">✅ Este trabajador NO tiene accidentes de trabajo registrados</div>""", unsafe_allow_html=True)
+            st.markdown("<div style='background:#D1E7DD;color:#0F5132;padding:16px;border-radius:10px;font-size:16px;font-weight:bold;text-align:center;'>✅ Este trabajador NO tiene accidentes de trabajo registrados</div>", unsafe_allow_html=True)
         else:
-            st.markdown(f"""<div style="background:#F8D7DA;color:#842029;padding:16px;border-radius:10px;
-            font-size:16px;font-weight:bold;text-align:center;">❌ Este trabajador tiene {len(ats)} accidente(s) de trabajo registrado(s)</div>""", unsafe_allow_html=True)
+            st.markdown(f"<div style='background:#F8D7DA;color:#842029;padding:16px;border-radius:10px;font-size:16px;font-weight:bold;text-align:center;'>❌ Este trabajador tiene {len(ats)} accidente(s) de trabajo registrado(s)</div>", unsafe_allow_html=True)
             for _, r in ats.iterrows():
                 fec = r.get(FF, "Sin fecha")
                 cie = r.get(FC, "Sin CIE-10")
                 est = r.get(FE, "Sin estado")
-                st.markdown(f"""<div style="background:#FFF3CD;color:#664D03;padding:12px;border-radius:8px;
-                margin:4px 0;border-left:3px solid #FD7E14;">
-                <b>📅 {fec}</b> — CIE-10: <b>{cie}</b> — Estado: <b>{est}</b></div>""", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:#FFF3CD;color:#664D03;padding:12px;border-radius:8px;margin:4px 0;border-left:3px solid #FD7E14;'><b>📅 {fec}</b> — CIE-10: <b>{cie}</b> — Estado: <b>{est}</b></div>", unsafe_allow_html=True)
     st.markdown("---")
-    # CONSULTA COMPLETA
     st.markdown("#### 📋 Consulta Completa")
     cb, cbtn = st.columns([3, 1])
     with cb:
@@ -212,23 +185,84 @@ with t3:
                 st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:12px;border-left:4px solid #0D6EFD;color:#1A1A2E;line-height:1.8;margin-top:16px;'>{r}</div>", unsafe_allow_html=True)
             st.session_state["_pq"] = ""
 
+# ═══════ TAB ADMINISTRADOR — SOLO ADMIN ═══════
 with t4:
     if not es_admin():
         st.warning("🔒 Solo el administrador puede acceder aquí")
     else:
-        st.markdown("<h2 style='color:#0D6EFD;'>⚙️ Administración de Datos</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color:#0D6EFD;'>⚙️ Panel de Administración</h2>", unsafe_allow_html=True)
+        st.markdown("---")
+
+        # SECCIÓN DE CARGA DE ARCHIVO
+        st.markdown("#### 📁 Cargar Archivo Excel")
+        st.markdown("<p style='color:#6C757D;'>Sube el archivo CARACTERIZACION ACCIDENTALIDAD.xlsx con las hojas FORMATO y BASE DATOS.</p>", unsafe_allow_html=True)
+        archivo = st.file_uploader("Seleccionar archivo Excel", type=["xlsx"], key="up_admin", label_visibility="collapsed")
+        if archivo:
+            try:
+                xl = pd.ExcelFile(archivo)
+                nf = pd.read_excel(xl, "FORMATO") if "FORMATO" in xl.sheet_names else pd.DataFrame()
+                nb = pd.read_excel(xl, "BASE DATOS") if "BASE DATOS" in xl.sheet_names else pd.DataFrame()
+                if nf.empty and nb.empty:
+                    st.error("❌ No se encontraron las hojas FORMATO ni BASE DATOS en el archivo")
+                else:
+                    with st.spinner("Guardando en base de datos..."):
+                        ok, msg = guardar_datos(nf, nb)
+                    if ok:
+                        st.success(msg)
+                        st.session_state.df_f, st.session_state.df_b = cargar_datos()
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            except Exception as e:
+                st.error(f"❌ Error al leer el archivo: {e}")
+
+        st.markdown("---")
+
+        # BOTÓN RECARGAR
+        col_r1, col_r2 = st.columns([1, 3])
+        with col_r1:
+            if st.button("🔄 Recargar Datos", use_container_width=True):
+                st.session_state.df_f, st.session_state.df_b = cargar_datos()
+                st.rerun()
+        with col_r2:
+            if st.button("🗑️ Limpiar Base de Datos", type="secondary", use_container_width=True):
+                from database import get_supa
+                supa = get_supa()
+                if supa:
+                    try:
+                        supa.table("formato").delete().neq("id", 0).execute()
+                        supa.table("base_datos").delete().neq("id", 0).execute()
+                        st.session_state.df_f, st.session_state.df_b = pd.DataFrame(), pd.DataFrame()
+                        st.success("✅ Base de datos limpiada")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ {e}")
+
+        st.markdown("---")
+
+        # RESUMEN DE LO CARGADO
+        st.markdown("#### 📊 Resumen de Datos Cargados")
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;border:1px solid #DEE2E6;text-align:center;'><div style='font-size:28px;font-weight:bold;color:#0D6EFD;'>{len(df_f)}</div><div style='color:#6C757D;'>Eventos en FORMATO</div></div>", unsafe_allow_html=True)
+        with rc2:
+            st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;border:1px solid #DEE2E6;text-align:center;'><div style='font-size:28px;font-weight:bold;color:#198754;'>{len(df_b)}</div><div style='color:#6C757D;'>Trabajadores en BASE DATOS</div></div>", unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # EDITORES DE DATOS
         s1, s2 = st.tabs(["📝 Formato", "👥 Base Datos"])
         with s1:
             st.markdown(f"<h3>Hoja FORMATO — {len(df_f)} registros</h3>", unsafe_allow_html=True)
             ef = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True, key="ef")
-            if st.button("💾 Guardar Formato", use_container_width=True):
+            if st.button("💾 Guardar Cambios Formato", use_container_width=True):
                 st.session_state.df_f = ef
                 ok, msg = guardar_datos(ef, st.session_state.df_b)
                 st.success(msg) if ok else st.error(msg)
         with s2:
             st.markdown(f"<h3>Hoja BASE DATOS — {len(df_b)} registros</h3>", unsafe_allow_html=True)
             eb = st.data_editor(df_b, num_rows="dynamic", use_container_width=True, hide_index=True, key="eb")
-            if st.button("💾 Guardar Base Datos", use_container_width=True):
+            if st.button("💾 Guardar Cambios Base Datos", use_container_width=True):
                 st.session_state.df_b = eb
                 ok, msg = guardar_datos(st.session_state.df_f, eb)
                 st.success(msg) if ok else st.error(msg)

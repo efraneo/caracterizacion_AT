@@ -1,6 +1,6 @@
 import plotly.graph_objects as go
 import pandas as pd
-from config import PALETA, COLOR_TEXT, COLOR_SEC, COLOR_DANGER, COLOR_WARNING, COLOR_ACCENT
+from config import PALETA, COLOR_TEXT, COLOR_SEC, COLOR_DANGER, COLOR_WARNING, COLOR_ACCENT, COLOR_INFO
 
 def tema(fig):
     fig.update_layout(
@@ -21,8 +21,7 @@ def g_dia_semana(df, col):
     vl = [fil[d] for d in of]
     fig = go.Figure(go.Bar(x=of, y=vl, marker_color=PALETA[:len(of)], text=vl, textposition="outside",
         marker_line_color="white", marker_line_width=1))
-    fig.update_layout(title="📅 Día con Más Accidentes", xaxis_title="Día", yaxis_title="Cantidad",
-        bargap=0.3)
+    fig.update_layout(title="📅 Día con Más Accidentes", xaxis_title="Día", yaxis_title="Cantidad", bargap=0.3)
     return tema(fig)
 
 def g_servicio(df, col):
@@ -77,8 +76,7 @@ def g_tendencia(df, col_fecha):
     ct = df.groupby("_m").size().reset_index(name="Eventos")
     fig = go.Figure(go.Scatter(x=ct["_m"], y=ct["Eventos"], mode="lines+markers+text",
         line=dict(color=PALETA[0], width=3), marker=dict(size=8, color=PALETA[0], line_color="white", line_width=2),
-        text=ct["Eventos"], textposition="top center", fill="tozeroy",
-        fillcolor="rgba(13,110,253,0.08)"))
+        text=ct["Eventos"], textposition="top center", fill="tozeroy", fillcolor="rgba(13,110,253,0.08)"))
     fig.update_layout(title="📈 Tendencia Mensual", xaxis_title="Mes", yaxis_title="Cantidad")
     return tema(fig)
 
