@@ -8,28 +8,29 @@ from ia_functions import analizar_datos_ia, generar_recomendaciones
 
 st.set_page_config(page_title="Caracterización AT", page_icon="🛡️", layout="wide")
 
-st.markdown(f"""<style>
-:root{{--bg:{COLOR_BG};--card:{COLOR_CARD};--accent:{COLOR_ACCENT};}}
-.stApp{{background:{COLOR_BG};}}
-.stTabs [data-baseweb="tab-list"]{{gap:8px;background:{COLOR_CARD};border-radius:12px;padding:6px;}}
-.stTabs [data-baseweb="tab"]{{border-radius:8px;color:{COLOR_SEC};font-weight:600;}}
-.stTabs [aria-selected="true"]{{background:{COLOR_ACCENT}!important;color:{COLOR_BG}!important;}}
-.stDataFrame{{background:{COLOR_CARD};border-radius:8px;}}
-.stTextInput>div>div>input{{background:{COLOR_CARD};color:{COLOR_TEXT};border-color:{COLOR_SEC};}}
-.sidebar .stButton>button{{background:{COLOR_ACCENT};color:{COLOR_BG};font-weight:bold;border-radius:8px;width:100%;}}
-.block-container{{padding-top:2rem;}}
+st.markdown("""<style>
+.stApp{background:#FFFFFF;}
+.stTabs [data-baseweb="tab-list"]{gap:6px;background:#F8F9FA;border-radius:10px;padding:4px;border:1px solid #DEE2E6;}
+.stTabs [data-baseweb="tab"]{border-radius:8px;color:#6C757D;font-weight:600;font-size:14px;}
+.stTabs [aria-selected="true"]{background:#0D6EFD!important;color:white!important;}
+.stDataFrame{border:1px solid #DEE2E6;border-radius:8px;}
+.stTextInput>div>div>input{background:white;color:#1A1A2E;border:1px solid #DEE2E6;border-radius:8px;}
+.stTextArea>div>div>textarea{background:white;color:#1A1A2E;border:1px solid #DEE2E6;border-radius:8px;}
+.sidebar{background:#F8F9FA;border-right:1px solid #DEE2E6;}
+.sidebar .stButton>button{background:#0D6EFD;color:white;font-weight:bold;border-radius:8px;width:100%;border:none;}
+.sidebar .stButton>button:hover{background:#0B5ED7;}
+.block-container{padding-top:2rem;max-width:1400px;}
+div[data-testid="stMetric"]{background:white;border:1px solid #DEE2E6;border-radius:10px;padding:12px;}
 </style>""", unsafe_allow_html=True)
 
-# ═══ LOGIN OBLIGATORIO ═══
 if not verificar_login():
     mostrar_login()
     st.stop()
 
-# ═══ SIDEBAR ═══
 with st.sidebar:
     rol = st.session_state.get("rol", "consultor")
     icon = "👑" if rol == "admin" else "👁️"
-    st.markdown(f"### {icon} {rol.upper()}")
+    st.markdown(f"### {icon} Rol: **{rol.upper()}**")
     st.markdown("---")
     logout()
     if es_admin():
@@ -56,23 +57,20 @@ with st.sidebar:
             st.session_state.df_f, st.session_state.df_b = cargar_datos()
             st.rerun()
 
-# ═══ CARGAR DATOS ═══
 if "df_f" not in st.session_state:
     st.session_state.df_f, st.session_state.df_b = cargar_datos()
 df_f, df_b = st.session_state.df_f, st.session_state.df_b
 
-# ═══ HEADER ═══
-st.markdown(f"<h1 style='color:{COLOR_ACCENT};text-align:center;'>🛡️ CARACTERIZACIÓN DE ACCIDENTALIDAD LABORAL</h1>", unsafe_allow_html=True)
-st.markdown(f"<p style='color:{COLOR_SEC};text-align:center;'>Análisis integral de Seguridad y Salud en el Trabajo</p>", unsafe_allow_html=True)
-st.markdown("---")
+st.markdown("<h1 style='color:#0D6EFD;text-align:center;'>🛡️ CARACTERIZACIÓN DE ACCIDENTALIDAD LABORAL</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color:#6C757D;text-align:center;'>Análisis integral de Seguridad y Salud en el Trabajo</p>", unsafe_allow_html=True)
+st.markdown("<hr style='border-color:#DEE2E6;'>", unsafe_allow_html=True)
 
 if df_f.empty:
     st.warning("⚠️ No hay datos cargados en el sistema.")
     if es_admin():
-        st.info("📁 Sube el archivo CARACTERIZACION ACCIDENTALIDAD.xlsx desde el panel lateral izquierdo.")
+        st.info("📁 Sube el archivo CARACTERIZACION ACCIDENTALIDAD.xlsx desde el panel lateral.")
     st.stop()
 
-# ═══ COLUMNAS EXACTAS DEL EXCEL ═══
 FF = "FECHA DEL EVENTO"
 FD = "DÍA DE LA SEMANA (DEL EVENTO)"
 FT = "TIPO DE EVENTO"
@@ -88,25 +86,27 @@ def cnt(b):
     if FT not in df_f.columns: return 0
     return df_f[FT].astype(str).str.contains(b, case=False, na=False).sum()
 
-# ═══ TABS ═══
 t1, t2, t3, t4 = st.tabs(["📊 Dashboard", "🔍 Consulta Trabajador", "🤖 Asistente IA", "⚙️ Administrador"])
 
-# ═══════ DASHBOARD ═══════
 with t1:
     total = len(df_f)
-    kpis = [kpi(total, "Total Eventos", COLOR_ACCENT), kpi(cnt("accidente"), "Accidentes", COLOR_DANGER),
-            kpi(cnt("enfermedad"), "Enf. Laborales", COLOR_WARNING), kpi(cnt("incidente"), "Incidentes", COLOR_INFO)]
+    kpis = [kpi(total,"Total Eventos",COLOR_ACCENT), kpi(cnt("accidente"),"Accidentes",COLOR_DANGER),
+            kpi(cnt("enfermedad"),"Enf. Laborales",COLOR_WARNING), kpi(cnt("incidente"),"Incidentes",COLOR_INFO)]
     st.markdown(f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:16px;'>{''.join(kpis)}</div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-
-    c1, c2 = st.columns(2)
-    with c1:
-        g = g_dia_semana(df_f, FD)
-        if g: st.plotly_chart(g, use_container_width=True)
-    with c2:
-        g = g_tipo_anual(df_f, FT, FF)
-        if g: st.plotly_chart(g, use_container_width=True)
-
+    for g_fn, g_col in [(g_dia_semana,FD),(g_tipo_anual,FT),(g_servicio,FA),(g_cie10,FC),
+                         (g_top5,FI),(g_tendencia,FF),(g_agente,FAG),(g_cuerpo,FCU),
+                         (g_naturaleza,FNA),(g_estado,FE)]:
+        c1, c2 = st.columns(2)
+        with c1:
+            args = [df_f, g_col] if g_fn not in [g_tipo_anual, g_tendencia, g_top5, g_estado] else [df_f]
+            if g_fn == g_tipo_anual: args = [df_f, FT, FF]
+            elif g_fn == g_tendencia: args = [df_f, FF]
+            elif g_fn == g_top5: args = [df_f, FI]
+            g = g_fn(*args)
+            if g: st.plotly_chart(g, use_container_width=True)
+        with c2:
+            break
     c3, c4 = st.columns(2)
     with c3:
         g = g_servicio(df_f, FA)
@@ -114,7 +114,6 @@ with t1:
     with c4:
         g = g_cie10(df_f, FC)
         if g: st.plotly_chart(g, use_container_width=True)
-
     c5, c6 = st.columns(2)
     with c5:
         g = g_top5(df_f, FI)
@@ -122,7 +121,6 @@ with t1:
     with c6:
         g = g_tendencia(df_f, FF)
         if g: st.plotly_chart(g, use_container_width=True)
-
     c7, c8 = st.columns(2)
     with c7:
         g = g_agente(df_f, FAG)
@@ -130,7 +128,6 @@ with t1:
     with c8:
         g = g_cuerpo(df_f, FCU)
         if g: st.plotly_chart(g, use_container_width=True)
-
     c9, c10 = st.columns(2)
     with c9:
         g = g_naturaleza(df_f, FNA)
@@ -138,19 +135,41 @@ with t1:
     with c10:
         g = g_estado(df_f, FE)
         if g: st.plotly_chart(g, use_container_width=True)
-
-    st.markdown(f"<h3 style='color:{COLOR_ACCENT};'>💡 Recomendaciones IA</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:#0D6EFD;'>💡 Recomendaciones IA</h3>", unsafe_allow_html=True)
     if st.button("🎯 Generar Recomendaciones", use_container_width=True):
-        with st.spinner("Analizando con IA..."):
+        with st.spinner("Analizando..."):
             r = generar_recomendaciones(df_f)
-            st.markdown(f"<div style='background:{COLOR_CARD};padding:20px;border-radius:10px;color:{COLOR_SEC};line-height:1.8;'>{r}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;color:#1A1A2E;line-height:1.8;border-left:4px solid #0D6EFD;'>{r}</div>", unsafe_allow_html=True)
 
-# ═══════ CONSULTA TRABAJADOR ═══════
 with t2:
-    st.markdown(f"<h2 style='color:{COLOR_ACCENT};'>🔍 Consulta por Trabajador</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#0D6EFD;'>🔍 Consulta por Trabajador</h2>", unsafe_allow_html=True)
+    # CONSULTA RÁPIDA AT
+    st.markdown("---")
+    st.markdown("#### ⚡ Consulta Rápida — ¿Sufrió Accidente de Trabajo?")
+    cid = st.text_input("Identificación del trabajador", placeholder="Ej: 1234567890", key="qr")
+    if cid:
+        mask = df_f[FI].astype(str).str.contains(cid, case=False, na=False) if FI in df_f.columns else pd.Series([False]*len(df_f))
+        eventos = df_f[mask]
+        ats = eventos[eventos[FT].astype(str).str.contains("accidente", case=False, na=False)] if FT in eventos.columns and not eventos.empty else pd.DataFrame()
+        if ats.empty:
+            st.markdown("""<div style="background:#D1E7DD;color:#0F5132;padding:16px;border-radius:10px;
+            font-size:16px;font-weight:bold;text-align:center;">✅ Este trabajador NO tiene accidentes de trabajo registrados</div>""", unsafe_allow_html=True)
+        else:
+            st.markdown(f"""<div style="background:#F8D7DA;color:#842029;padding:16px;border-radius:10px;
+            font-size:16px;font-weight:bold;text-align:center;">❌ Este trabajador tiene {len(ats)} accidente(s) de trabajo registrado(s)</div>""", unsafe_allow_html=True)
+            for _, r in ats.iterrows():
+                fec = r.get(FF, "Sin fecha")
+                cie = r.get(FC, "Sin CIE-10")
+                est = r.get(FE, "Sin estado")
+                st.markdown(f"""<div style="background:#FFF3CD;color:#664D03;padding:12px;border-radius:8px;
+                margin:4px 0;border-left:3px solid #FD7E14;">
+                <b>📅 {fec}</b> — CIE-10: <b>{cie}</b> — Estado: <b>{est}</b></div>""", unsafe_allow_html=True)
+    st.markdown("---")
+    # CONSULTA COMPLETA
+    st.markdown("#### 📋 Consulta Completa")
     cb, cbtn = st.columns([3, 1])
     with cb:
-        bus = st.text_input("Identificación o cédula", placeholder="Ej: 1234567890")
+        bus = st.text_input("Búsqueda completa por identificación", placeholder="Ej: 1234567890", key="bc")
     with cbtn:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔎 Buscar", use_container_width=True):
@@ -160,27 +179,25 @@ with t2:
         dt = df_b[df_b[FI].astype(str).str.contains(bus, case=False, na=False)] if FI in df_b.columns else pd.DataFrame()
         et = df_f[df_f[FI].astype(str).str.contains(bus, case=False, na=False)] if FI in df_f.columns else pd.DataFrame()
         if dt.empty and et.empty:
-            st.warning("⚠️ Sin resultados para esa identificación")
+            st.warning("⚠️ Sin resultados")
         else:
             if not dt.empty:
-                st.markdown(f"<h3 style='color:{COLOR_ACCENT};'>👤 Datos del Trabajador</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#0D6EFD;'>👤 Datos del Trabajador</h3>", unsafe_allow_html=True)
                 for _, row in dt.iterrows():
                     cols = st.columns(min(4, len(row)))
                     for i, (c, v) in enumerate(row.items()):
                         with cols[i % 4]:
-                            st.markdown(f"<div style='background:{COLOR_CARD};padding:12px;border-radius:8px;margin:4px;border-left:3px solid {COLOR_ACCENT};'><small style='color:{COLOR_SEC};'>{c}</small><br><b style='color:{COLOR_TEXT};'>{v}</b></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background:#F8F9FA;padding:12px;border-radius:8px;margin:4px;border-left:3px solid #0D6EFD;border:1px solid #DEE2E6;'><small style='color:#6C757D;'>{c}</small><br><b style='color:#1A1A2E;'>{v}</b></div>", unsafe_allow_html=True)
             if not et.empty:
-                st.markdown(f"<h3 style='color:{COLOR_DANGER};'>📋 Historial de Eventos ({len(et)})</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color:#DC3545;'>📋 Historial de Eventos ({len(et)})</h3>", unsafe_allow_html=True)
                 st.dataframe(et, use_container_width=True, hide_index=True)
                 if FC in et.columns:
-                    st.markdown(f"<h3 style='color:{COLOR_WARNING};'>🏥 CIE-10 Registrados</h3>", unsafe_allow_html=True)
+                    st.markdown("<h3 style='color:#FD7E14;'>🏥 CIE-10 Registrados</h3>", unsafe_allow_html=True)
                     for c, n in et[FC].value_counts().items():
-                        st.markdown(f"<div style='background:{COLOR_CARD};padding:10px;border-radius:8px;margin:4px;display:flex;justify-content:space-between;'><span style='color:{COLOR_TEXT};'>{c}</span><span style='color:{COLOR_ACCENT};font-weight:bold;'>{n} vez(es)</span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#F8F9FA;padding:10px;border-radius:8px;margin:4px;display:flex;justify-content:space-between;border:1px solid #DEE2E6;'><span style='color:#1A1A2E;'>{c}</span><span style='color:#0D6EFD;font-weight:bold;'>{n} vez(es)</span></div>", unsafe_allow_html=True)
 
-# ═══════ ASISTENTE IA ═══════
 with t3:
-    st.markdown(f"<h2 style='color:{COLOR_ACCENT};'>🤖 Asistente de Análisis IA</h2>", unsafe_allow_html=True)
-    st.markdown(f"<p style='color:{COLOR_SEC};'>Pregúntame lo que quieras sobre tus datos</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#0D6EFD;'>🤖 Asistente de Análisis IA</h2>", unsafe_allow_html=True)
     sug = ["¿Principales riesgos?", "¿Medidas preventivas?", "¿Patrones estacionales?", "¿Servicios prioritarios?"]
     cs = st.columns(4)
     for i, s in enumerate(sug):
@@ -192,15 +209,14 @@ with t3:
         if pq:
             with st.spinner("Pensando..."):
                 r = analizar_datos_ia(df_f, df_b, pq)
-                st.markdown(f"<div style='background:{COLOR_CARD};padding:20px;border-radius:12px;border-left:4px solid {COLOR_ACCENT};color:{COLOR_SEC};line-height:1.8;margin-top:16px;'>{r}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:12px;border-left:4px solid #0D6EFD;color:#1A1A2E;line-height:1.8;margin-top:16px;'>{r}</div>", unsafe_allow_html=True)
             st.session_state["_pq"] = ""
 
-# ═══════ ADMINISTRADOR ═══════
 with t4:
     if not es_admin():
-        st.warning("🔒 Solo el administrador puede acceder a esta sección")
+        st.warning("🔒 Solo el administrador puede acceder aquí")
     else:
-        st.markdown(f"<h2 style='color:{COLOR_ACCENT};'>⚙️ Administración de Datos</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color:#0D6EFD;'>⚙️ Administración de Datos</h2>", unsafe_allow_html=True)
         s1, s2 = st.tabs(["📝 Formato", "👥 Base Datos"])
         with s1:
             st.markdown(f"<h3>Hoja FORMATO — {len(df_f)} registros</h3>", unsafe_allow_html=True)
@@ -217,5 +233,5 @@ with t4:
                 ok, msg = guardar_datos(st.session_state.df_f, eb)
                 st.success(msg) if ok else st.error(msg)
 
-st.markdown("---")
-st.markdown(f"<p style='color:{COLOR_SEC};text-align:center;font-size:12px;'>🛡️ Caracterización AT v2.0 — Seguridad y Salud en el Trabajo</p>", unsafe_allow_html=True)
+st.markdown("<hr style='border-color:#DEE2E6;'>", unsafe_allow_html=True)
+st.markdown("<p style='color:#6C757D;text-align:center;font-size:12px;'>🛡️ Caracterización AT v2.0</p>", unsafe_allow_html=True)

@@ -44,33 +44,25 @@ MAP_B = {
     "enfermedad_pulmonar": "ENFERMEDAD PULMONAR"
 }
 MAP_B_INV = {v: k for k, v in MAP_B.items()}
-
-# Columnas válidas que existen en la tabla SQL
-SQL_COLS_F = set(MAP_F.keys())
-SQL_COLS_B = set(MAP_B.keys())
+SQL_F = set(MAP_F.keys())
+SQL_B = set(MAP_B.keys())
 
 def get_supa():
     url = st.secrets.get("SUPABASE_URL", "")
     key = st.secrets.get("SUPABASE_KEY", "")
-    if not url or not key:
-        return None
+    if not url or not key: return None
     return create_client(url, key)
 
 def safe_val(v):
-    if pd.isna(v):
-        return None
-    if isinstance(v, (date, datetime)):
-        return str(v)
-    if isinstance(v, time):
-        return str(v)
-    if hasattr(v, 'item'):
-        return v.item()
+    if pd.isna(v): return None
+    if isinstance(v, (date, datetime)): return str(v)
+    if isinstance(v, time): return str(v)
+    if hasattr(v, 'item'): return v.item()
     return v
 
 def cargar_datos():
     supa = get_supa()
-    if not supa:
-        return pd.DataFrame(), pd.DataFrame()
+    if not supa: return pd.DataFrame(), pd.DataFrame()
     try:
         rf = supa.table("formato").select("*").execute()
         rb = supa.table("base_datos").select("*").execute()
@@ -79,32 +71,36 @@ def cargar_datos():
         for c in ["id", "created_at", "updated_at"]:
             df_f = df_f.drop(columns=[c], errors="ignore")
             df_b = df_b.drop(columns=[c], errors="ignore")
-        df_f = df_f.rename(columns=MAP_F)
-        df_b = df_b.rename(columns=MAP_B)
-        return df_f, df_b
+        return df_f.rename(columns=MAP_F), df_b.rename(columns=MAP_B)
     except Exception:
         return pd.DataFrame(), pd.DataFrame()
 
 def guardar_datos(df_f, df_b):
     supa = get_supa()
-    if not supa:
-        return False, "Sin credenciales Supabase"
+    if not supa: return False, "Sin credenciales Supabase"
     try:
-        # Limpiar espacios en nombres de columna del Excel
         df_f = df_f.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
         df_b = df_b.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
-        # Renombrar Excel → SQL
         df_fs = df_f.rename(columns=MAP_F_INV)
         df_bs = df_b.rename(columns=MAP_B_INV)
-        # SOLO columnas que existen en la tabla SQL
-        cols_f = [c for c in df_fs.columns if c in SQL_COLS_F]
-        cols_b = [c for c in df_bs.columns if c in SQL_COLS_B]
+        # Eliminar duplicados por (fecha_evento, identificacion)
+        if "fecha_evento" in df_fs.columns and "identificacion" in df_fs.columns:
+            antes = len(df_fs)
+            df_fs = df_fs.drop_duplicates(subset=["fecha_evento", "identificacion"], keep="last")
+            duplicados = antes - len(df_fs)
+        else:
+            duplicados = 0
+        cols_f = [c for c in df_fs.columns if c in SQL_F]
+        cols_b = [c for c in df_bs.columns if c in SQL_B]
         for _, row in df_fs[cols_f].iterrows():
             d = {k: safe_val(v) for k, v in row.items()}
-            supa.table("formato").upsert(d).execute()
+            supa.table("formato").upsert(d, on_conflict="fecha_evento,identificacion").execute()
         for _, row in df_bs[cols_b].iterrows():
             d = {k: safe_val(v) for k, v in row.items()}
             supa.table("base_datos").upsert(d).execute()
-        return True, f"✅ {len(df_f)} eventos + {len(df_b)} trabajadores guardados"
+        msg = f"✅ {len(df_fs)} eventos + {len(df_bs)} trabajadores"
+        if duplicados > 0:
+            msg += f" ({duplicados} duplicados omitidos)"
+        return True, msg
     except Exception as e:
         return False, f"❌ Error: {str(e)}"
