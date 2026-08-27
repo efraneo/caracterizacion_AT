@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
+from datetime import date, time, datetime
 from supabase import create_client
 
-# Mapeo SQL → nombres exactos del Excel (FORMATO)
 MAP_F = {
     "no_registro": "No.", "fecha_evento": "FECHA DEL EVENTO", "hora": "HORA",
     "identificacion": "IDENTIFICACION", "nombre_apellido": "NOMBRE Y APELLIDO",
@@ -29,7 +29,6 @@ MAP_F = {
 }
 MAP_F_INV = {v: k for k, v in MAP_F.items()}
 
-# Mapeo SQL → nombres exactos del Excel (BASE DATOS)
 MAP_B = {
     "no_registro": "No.", "identificacion": "IDENTIFICACION",
     "apellidos_nombres": "APELLIDOS Y NOMBRES", "cargo": "CARGO",
@@ -52,6 +51,17 @@ def get_supa():
     if not url or not key:
         return None
     return create_client(url, key)
+
+def safe_val(v):
+    if pd.isna(v):
+        return None
+    if isinstance(v, (date, datetime)):
+        return str(v)
+    if isinstance(v, time):
+        return str(v)
+    if hasattr(v, 'item'):
+        return v.item()
+    return v
 
 def cargar_datos():
     supa = get_supa()
@@ -79,11 +89,13 @@ def guardar_datos(df_f, df_b):
         df_fs = df_f.rename(columns=MAP_F_INV)
         df_bs = df_b.rename(columns=MAP_B_INV)
         exc = ["id", "created_at", "updated_at"]
-        for _, row in df_fs[[c for c in df_fs.columns if c not in exc]].iterrows():
-            d = {k: (None if pd.isna(v) else v) for k, v in row.items()}
+        cols_f = [c for c in df_fs.columns if c not in exc]
+        cols_b = [c for c in df_bs.columns if c not in exc]
+        for _, row in df_fs[cols_f].iterrows():
+            d = {k: safe_val(v) for k, v in row.items()}
             supa.table("formato").upsert(d).execute()
-        for _, row in df_bs[[c for c in df_bs.columns if c not in exc]].iterrows():
-            d = {k: (None if pd.isna(v) else v) for k, v in row.items()}
+        for _, row in df_bs[cols_b].iterrows():
+            d = {k: safe_val(v) for k, v in row.items()}
             supa.table("base_datos").upsert(d).execute()
         return True, f"✅ {len(df_f)} eventos + {len(df_b)} trabajadores guardados"
     except Exception as e:
