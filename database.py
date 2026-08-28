@@ -28,7 +28,6 @@ MAP_F = {
     "estado_evento": "ESTADO DEL EVENTO (ABIERTO, CERRADO, EN PROCESO)"
 }
 MAP_F_INV = {v: k for k, v in MAP_F.items()}
-
 MAP_B = {
     "no_registro": "No.", "identificacion": "IDENTIFICACION",
     "apellidos_nombres": "APELLIDOS Y NOMBRES", "cargo": "CARGO",
@@ -58,7 +57,17 @@ def safe_val(v):
     if isinstance(v, (date, datetime)): return str(v)
     if isinstance(v, time): return str(v)
     if hasattr(v, 'item'): return v.item()
+    if isinstance(v, str) and v.strip().lower() in ("none", "nan", ""): return None
     return v
+
+def limpiar_filas(df, col_id, col_fecha=None):
+    """Elimina filas donde la identificación sea None/nan/vacía"""
+    if col_id and col_id in df.columns:
+        s = df[col_id].astype(str).str.strip().str.lower()
+        df = df[s.notna() & (s != "none") & (s != "nan") & (s != "")]
+    if col_fecha and col_fecha in df.columns:
+        df = df[df[col_fecha].notna()]
+    return df
 
 def cargar_datos():
     supa = get_supa()
@@ -83,13 +92,19 @@ def guardar_datos(df_f, df_b):
         df_b = df_b.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
         df_fs = df_f.rename(columns=MAP_F_INV)
         df_bs = df_b.rename(columns=MAP_B_INV)
-        # Eliminar duplicados por (fecha_evento, identificacion)
+        # Eliminar filas None/inválidas
+        df_fs = limpiar_filas(df_fs, "identificacion", "fecha_evento")
+        df_bs = limpiar_filas(df_bs, "identificacion")
+        # Eliminar duplicados por (fecha, identificacion)
         if "fecha_evento" in df_fs.columns and "identificacion" in df_fs.columns:
             antes = len(df_fs)
             df_fs = df_fs.drop_duplicates(subset=["fecha_evento", "identificacion"], keep="last")
-            duplicados = antes - len(df_fs)
+            dup = antes - len(df_fs)
         else:
-            duplicados = 0
+            dup = 0
+        # También limpiar duplicados en base_datos por identificacion
+        if "identificacion" in df_bs.columns:
+            df_bs = df_bs.drop_duplicates(subset=["identificacion"], keep="last")
         cols_f = [c for c in df_fs.columns if c in SQL_F]
         cols_b = [c for c in df_bs.columns if c in SQL_B]
         for _, row in df_fs[cols_f].iterrows():
@@ -99,8 +114,7 @@ def guardar_datos(df_f, df_b):
             d = {k: safe_val(v) for k, v in row.items()}
             supa.table("base_datos").upsert(d).execute()
         msg = f"✅ {len(df_fs)} eventos + {len(df_bs)} trabajadores"
-        if duplicados > 0:
-            msg += f" ({duplicados} duplicados omitidos)"
+        if dup > 0: msg += f" ({dup} duplicados omitidos)"
         return True, msg
     except Exception as e:
         return False, f"❌ Error: {str(e)}"

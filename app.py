@@ -33,7 +33,7 @@ with st.sidebar:
     st.markdown("---")
     logout()
 
-# ═══ DEFINICIONES GLOBALES (antes de cualquier condicional) ═══
+# ═══ DEFINICIONES GLOBALES ═══
 FF = "FECHA DEL EVENTO"
 FD = "DÍA DE LA SEMANA (DEL EVENTO)"
 FT = "TIPO DE EVENTO"
@@ -45,9 +45,13 @@ FAG = "AGENTE DEL ACCIDENTE"
 FNA = "NATURALEZA DE LA LESIÓN"
 FE = "ESTADO DEL EVENTO (ABIERTO, CERRADO, EN PROCESO)"
 
-def cnt(b):
-    if FT not in df_f.columns: return 0
-    return df_f[FT].astype(str).str.contains(b, case=False, na=False).sum()
+COL_KPI = [COLOR_ACCENT, COLOR_DANGER, COLOR_WARNING, COLOR_INFO, PALETA[4], PALETA[5]]
+
+def filtrar_validos(df):
+    """Quitar filas donde identificación sea None/nan/vacía"""
+    if FI not in df.columns: return df
+    s = df[FI].astype(str).str.strip().str.lower()
+    return df[s.notna() & (s != "none") & (s != "nan") & (s != "")]
 
 # ═══ CARGAR DATOS ═══
 if "df_f" not in st.session_state:
@@ -59,7 +63,6 @@ st.markdown("<h1 style='color:#0D6EFD;text-align:center;'>🛡️ CARACTERIZACI�
 st.markdown("<p style='color:#6C757D;text-align:center;'>Análisis integral de Seguridad y Salud en el Trabajo</p>", unsafe_allow_html=True)
 st.markdown("<hr style='border-color:#DEE2E6;'>", unsafe_allow_html=True)
 
-# Consultor sin datos → bloquear
 if df_f.empty and not es_admin():
     st.warning("⚠️ No hay datos cargados. Contacte al administrador.")
     st.stop()
@@ -75,50 +78,63 @@ with t1:
     if df_f.empty:
         st.info("📁 No hay datos. Carga el archivo Excel desde ⚙️ Administrador.")
     else:
-        total = len(df_f)
-        kpis = [kpi(total,"Total Eventos",COLOR_ACCENT), kpi(cnt("accidente"),"Accidentes",COLOR_DANGER),
-                kpi(cnt("enfermedad"),"Enf. Laborales",COLOR_WARNING), kpi(cnt("incidente"),"Incidentes",COLOR_INFO)]
-        st.markdown(f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:16px;'>{''.join(kpis)}</div>", unsafe_allow_html=True)
+        # Filtrar solo registros válidos (sin None)
+        df_v = filtrar_validos(df_f)
+        total = len(df_v)
+
+        # KPIs con valores REALES de TIPO DE EVENTO
+        kpis = [kpi(total, "Total Eventos", COLOR_ACCENT)]
+        if FT in df_v.columns:
+            tipos = df_v[FT].dropna().astype(str).str.strip()
+            tipos = tipos[(tipos != "None") & (tipos != "nan") & (tipos != "")]
+            for i, (tipo, cant) in enumerate(tipos.value_counts().items()):
+                kpis.append(kpi(cant, tipo, COL_KPI[(i + 1) % len(COL_KPI)]))
+
+        # Mostrar KPIs en grid dinámico
+        n = len(kpis)
+        cols_grid = f"repeat({n},1fr)" if n <= 6 else "repeat(3,1fr)"
+        st.markdown(f"<div style='display:grid;grid-template-columns:{cols_grid};gap:16px;'>{''.join(kpis)}</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
+
         c1, c2 = st.columns(2)
         with c1:
-            g = g_dia_semana(df_f, FD)
+            g = g_dia_semana(df_v, FD)
             if g: st.plotly_chart(g, use_container_width=True)
         with c2:
-            g = g_tipo_anual(df_f, FT, FF)
+            g = g_tipo_anual(df_v, FT, FF)
             if g: st.plotly_chart(g, use_container_width=True)
         c3, c4 = st.columns(2)
         with c3:
-            g = g_servicio(df_f, FA)
+            g = g_servicio(df_v, FA)
             if g: st.plotly_chart(g, use_container_width=True)
         with c4:
-            g = g_cie10(df_f, FC)
+            g = g_cie10(df_v, FC)
             if g: st.plotly_chart(g, use_container_width=True)
         c5, c6 = st.columns(2)
         with c5:
-            g = g_top5(df_f, FI)
+            g = g_top5(df_v, FI)
             if g: st.plotly_chart(g, use_container_width=True)
         with c6:
-            g = g_tendencia(df_f, FF)
+            g = g_tendencia(df_v, FF)
             if g: st.plotly_chart(g, use_container_width=True)
         c7, c8 = st.columns(2)
         with c7:
-            g = g_agente(df_f, FAG)
+            g = g_agente(df_v, FAG)
             if g: st.plotly_chart(g, use_container_width=True)
         with c8:
-            g = g_cuerpo(df_f, FCU)
+            g = g_cuerpo(df_v, FCU)
             if g: st.plotly_chart(g, use_container_width=True)
         c9, c10 = st.columns(2)
         with c9:
-            g = g_naturaleza(df_f, FNA)
+            g = g_naturaleza(df_v, FNA)
             if g: st.plotly_chart(g, use_container_width=True)
         with c10:
-            g = g_estado(df_f, FE)
+            g = g_estado(df_v, FE)
             if g: st.plotly_chart(g, use_container_width=True)
         st.markdown(f"<h3 style='color:#0D6EFD;'>💡 Recomendaciones IA</h3>", unsafe_allow_html=True)
         if st.button("🎯 Generar Recomendaciones", use_container_width=True):
             with st.spinner("Analizando..."):
-                r = generar_recomendaciones(df_f)
+                r = generar_recomendaciones(df_v)
                 st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;color:#1A1A2E;line-height:1.8;border-left:4px solid #0D6EFD;'>{r}</div>", unsafe_allow_html=True)
 
 # ═══════ CONSULTA TRABAJADOR ═══════
@@ -126,13 +142,14 @@ with t2:
     if df_f.empty:
         st.info("📁 No hay datos. Carga el archivo Excel desde ⚙️ Administrador.")
     else:
+        df_v2 = filtrar_validos(df_f)
         st.markdown("<h2 style='color:#0D6EFD;'>🔍 Consulta por Trabajador</h2>", unsafe_allow_html=True)
         st.markdown("---")
         st.markdown("#### ⚡ Consulta Rápida — ¿Sufrió Accidente de Trabajo?")
         cid = st.text_input("Identificación del trabajador", placeholder="Ej: 1234567890", key="qr")
         if cid:
-            mask = df_f[FI].astype(str).str.contains(cid, case=False, na=False) if FI in df_f.columns else pd.Series([False]*len(df_f))
-            eventos = df_f[mask]
+            mask = df_v2[FI].astype(str).str.contains(cid, case=False, na=False) if FI in df_v2.columns else pd.Series([False]*len(df_v2))
+            eventos = df_v2[mask]
             ats = eventos[eventos[FT].astype(str).str.contains("accidente", case=False, na=False)] if FT in eventos.columns and not eventos.empty else pd.DataFrame()
             if ats.empty:
                 st.markdown("<div style='background:#D1E7DD;color:#0F5132;padding:16px;border-radius:10px;font-size:16px;font-weight:bold;text-align:center;'>✅ Este trabajador NO tiene accidentes de trabajo registrados</div>", unsafe_allow_html=True)
@@ -155,7 +172,7 @@ with t2:
         bus = st.session_state.get("_bus", "")
         if bus:
             dt = df_b[df_b[FI].astype(str).str.contains(bus, case=False, na=False)] if FI in df_b.columns else pd.DataFrame()
-            et = df_f[df_f[FI].astype(str).str.contains(bus, case=False, na=False)] if FI in df_f.columns else pd.DataFrame()
+            et = df_v2[df_v2[FI].astype(str).str.contains(bus, case=False, na=False)] if FI in df_v2.columns else pd.DataFrame()
             if dt.empty and et.empty:
                 st.warning("⚠️ Sin resultados")
             else:
@@ -194,7 +211,7 @@ with t3:
                     st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:12px;border-left:4px solid #0D6EFD;color:#1A1A2E;line-height:1.8;margin-top:16px;'>{r}</div>", unsafe_allow_html=True)
                 st.session_state["_pq"] = ""
 
-# ═══════ ADMINISTRADOR — SOLO ADMIN ═══════
+# ═══════ ADMINISTRADOR ═══════
 if es_admin():
     with t4:
         st.markdown("<h2 style='color:#0D6EFD;'>⚙️ Panel de Administración</h2>", unsafe_allow_html=True)
@@ -242,28 +259,22 @@ if es_admin():
         st.markdown("#### 📊 Resumen de Datos Cargados")
         rc1, rc2 = st.columns(2)
         with rc1:
-            st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;border:1px solid #DEE2E6;text-align:center;'><div style='font-size:28px;font-weight:bold;color:#0D6EFD;'>{len(df_f)}</div><div style='color:#6C757D;'>Eventos en FORMATO</div></div>", unsafe_allow_html=True)
+            df_v_r = filtrar_validos(df_f)
+            st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;border:1px solid #DEE2E6;text-align:center;'><div style='font-size:28px;font-weight:bold;color:#0D6EFD;'>{len(df_v_r)}</div><div style='color:#6C757D;'>Eventos válidos en FORMATO</div></div>", unsafe_allow_html=True)
         with rc2:
             st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;border:1px solid #DEE2E6;text-align:center;'><div style='font-size:28px;font-weight:bold;color:#198754;'>{len(df_b)}</div><div style='color:#6C757D;'>Trabajadores en BASE DATOS</div></div>", unsafe_allow_html=True)
         st.markdown("---")
         if not df_f.empty:
             s1, s2 = st.tabs(["📝 Formato", "👥 Base Datos"])
             with s1:
-                st.markdown(f"<h3>Hoja FORMATO — {len(df_f)} registros</h3>", unsafe_allow_html=True)
-                ef = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True, key="ef")
-                if st.button("💾 Guardar Cambios Formato", use_container_width=True):
-                    st.session_state.df_f = ef
-                    ok, msg = guardar_datos(ef, st.session_state.df_b)
-                    st.success(msg) if ok else st.error(msg)
+                df_v_e = filtrar_validos(df_f)
+                st.markdown(f"<h3>Hoja FORMATO — {len(df_v_e)} registros válidos</h3>", unsafe_allow_html=True)
+                st.dataframe(df_v_e, use_container_width=True, hide_index=True)
             with s2:
                 st.markdown(f"<h3>Hoja BASE DATOS — {len(df_b)} registros</h3>", unsafe_allow_html=True)
-                eb = st.data_editor(df_b, num_rows="dynamic", use_container_width=True, hide_index=True, key="eb")
-                if st.button("💾 Guardar Cambios Base Datos", use_container_width=True):
-                    st.session_state.df_b = eb
-                    ok, msg = guardar_datos(st.session_state.df_f, eb)
-                    st.success(msg) if ok else st.error(msg)
+                st.dataframe(df_b, use_container_width=True, hide_index=True)
         else:
-            st.info("📁 Carga el archivo Excel para habilitar la edición de datos.")
+            st.info("📁 Carga el archivo Excel para ver los datos.")
 
 st.markdown("<hr style='border-color:#DEE2E6;'>", unsafe_allow_html=True)
 st.markdown("<p style='color:#6C757D;text-align:center;font-size:12px;'>🛡️ Caracterización AT v2.0</p>", unsafe_allow_html=True)
