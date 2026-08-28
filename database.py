@@ -57,25 +57,25 @@ def safe_val(v):
     if isinstance(v, (date, datetime)): return str(v)
     if isinstance(v, time): return str(v)
     if hasattr(v, 'item'): v = v.item()
-    if isinstance(v, str) and v.strip().lower() in ("none", "nan", "", "nat"): return None
+    if isinstance(v, str) and v.strip().lower() in ("none", "nan", "", "nat", "sin dato", "na"): return None
     return v
 
 def limpiar_filas(df, col_id, col_fecha=None):
-    """Elimina filas donde identificación sea None/nan/vacía"""
     if col_id and col_id in df.columns:
         s = df[col_id].astype(str).str.strip().str.lower()
-        df = df[s.notna() & (s != "none") & (s != "nan") & (s != "nat") & (s != "")]
+        df = df[s.notna() & (s != "none") & (s != "nan") & (s != "nat") & (s != "") & (s != "na") & (s != "sin dato")]
     if col_fecha and col_fecha in df.columns:
         df = df[df[col_fecha].notna()]
     return df
 
-def preparar_batch(df, cols_validas):
-    """Convierte DataFrame a lista de diccionarios limpios"""
-    lote = []
+def preparar_lote(df, cols_validas):
     cols = [c for c in df.columns if c in cols_validas]
+    if not cols: return []
+    lote = []
     for _, row in df[cols].iterrows():
         d = {k: safe_val(v) for k, v in row.items()}
-        lote.append(d)
+        if any(v is not None for v in d.values()):
+            lote.append(d)
     return lote
 
 def cargar_datos():
@@ -97,19 +97,19 @@ def guardar_datos(df_f, df_b):
     supa = get_supa()
     if not supa: return False, "Sin credenciales Supabase"
     try:
-        # Limpiar espacios en nombres de columna
         df_f = df_f.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
         df_b = df_b.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
 
-        # Mapear a nombres SQL
+        # Debug: ver qué columnas trae el Excel
+        cols_excel_f = list(df_f.columns)
+        cols_excel_b = list(df_b.columns)
+
         df_fs = df_f.rename(columns=MAP_F_INV)
         df_bs = df_b.rename(columns=MAP_B_INV)
 
-        # ELIMINAR filas None/inválidas
         df_fs = limpiar_filas(df_fs, "identificacion", "fecha_evento")
         df_bs = limpiar_filas(df_bs, "identificacion")
 
-        # Eliminar duplicados
         dup_f = 0
         if "fecha_evento" in df_fs.columns and "identificacion" in df_fs.columns:
             antes = len(df_fs)
@@ -121,16 +121,20 @@ def guardar_datos(df_f, df_b):
             df_bs = df_bs.drop_duplicates(subset=["identificacion"], keep="last")
             dup_b = antes - len(df_bs)
 
-        # Preparar lotes
-        lote_f = preparar_batch(df_fs, SQL_F)
-        lote_b = preparar_batch(df_bs, SQL_B)
+        lote_f = preparar_lote(df_fs, SQL_F)
+        lote_b = preparar_lote(df_bs, SQL_B)
 
-        # INSERTAR POR LOTES (chunk de 500) — rápido
+        # Si no hay nada válido, decir qué pasó
+        if not lote_f and not lote_b:
+            return False, f"❌ No hay datos válidos. Columnas Excel FORMATO: {cols_excel_f[:5]}... Columnas SQL esperadas: {list(MAP_F_INV.keys())[:5]}..."
+
         CHUNK = 500
-        for i in range(0, len(lote_f), CHUNK):
-            supa.table("formato").upsert(lote_f[i:i+CHUNK], on_conflict="fecha_evento,identificacion").execute()
-        for i in range(0, len(lote_b), CHUNK):
-            supa.table("base_datos").upsert(lote_b[i:i+CHUNK]).execute()
+        if lote_f:
+            for i in range(0, len(lote_f), CHUNK):
+                supa.table("formato").upsert(lote_f[i:i+CHUNK], on_conflict="fecha_evento,identificacion").execute()
+        if lote_b:
+            for i in range(0, len(lote_b), CHUNK):
+                supa.table("base_datos").upsert(lote_b[i:i+CHUNK]).execute()
 
         msg = f"✅ {len(lote_f)} eventos + {len(lote_b)} trabajadores"
         extras = []
