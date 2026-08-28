@@ -33,19 +33,7 @@ with st.sidebar:
     st.markdown("---")
     logout()
 
-if "df_f" not in st.session_state:
-    st.session_state.df_f, st.session_state.df_b = cargar_datos()
-df_f, df_b = st.session_state.df_f, st.session_state.df_b
-
-st.markdown("<h1 style='color:#0D6EFD;text-align:center;'>🛡️ CARACTERIZACIÓN DE ACCIDENTALIDAD LABORAL</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#6C757D;text-align:center;'>Análisis integral de Seguridad y Salud en el Trabajo</p>", unsafe_allow_html=True)
-st.markdown("<hr style='border-color:#DEE2E6;'>", unsafe_allow_html=True)
-
-# Si NO es admin y NO hay datos → bloquear
-if df_f.empty and not es_admin():
-    st.warning("⚠️ No hay datos cargados en el sistema. Contacte al administrador.")
-    st.stop()
-
+# ═══ DEFINICIONES GLOBALES (antes de cualquier condicional) ═══
 FF = "FECHA DEL EVENTO"
 FD = "DÍA DE LA SEMANA (DEL EVENTO)"
 FT = "TIPO DE EVENTO"
@@ -56,6 +44,25 @@ FCU = "PARTE DEL CUERPO AFECTADA"
 FAG = "AGENTE DEL ACCIDENTE"
 FNA = "NATURALEZA DE LA LESIÓN"
 FE = "ESTADO DEL EVENTO (ABIERTO, CERRADO, EN PROCESO)"
+
+def cnt(b):
+    if FT not in df_f.columns: return 0
+    return df_f[FT].astype(str).str.contains(b, case=False, na=False).sum()
+
+# ═══ CARGAR DATOS ═══
+if "df_f" not in st.session_state:
+    st.session_state.df_f, st.session_state.df_b = cargar_datos()
+df_f, df_b = st.session_state.df_f, st.session_state.df_b
+
+# ═══ HEADER ═══
+st.markdown("<h1 style='color:#0D6EFD;text-align:center;'>🛡️ CARACTERIZACIÓN DE ACCIDENTALIDAD LABORAL</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color:#6C757D;text-align:center;'>Análisis integral de Seguridad y Salud en el Trabajo</p>", unsafe_allow_html=True)
+st.markdown("<hr style='border-color:#DEE2E6;'>", unsafe_allow_html=True)
+
+# Consultor sin datos → bloquear
+if df_f.empty and not es_admin():
+    st.warning("⚠️ No hay datos cargados. Contacte al administrador.")
+    st.stop()
 
 # Tabs condicionales
 if es_admin():
@@ -73,7 +80,6 @@ with t1:
                 kpi(cnt("enfermedad"),"Enf. Laborales",COLOR_WARNING), kpi(cnt("incidente"),"Incidentes",COLOR_INFO)]
         st.markdown(f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:16px;'>{''.join(kpis)}</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
-
         c1, c2 = st.columns(2)
         with c1:
             g = g_dia_semana(df_f, FD)
@@ -81,7 +87,6 @@ with t1:
         with c2:
             g = g_tipo_anual(df_f, FT, FF)
             if g: st.plotly_chart(g, use_container_width=True)
-
         c3, c4 = st.columns(2)
         with c3:
             g = g_servicio(df_f, FA)
@@ -89,7 +94,6 @@ with t1:
         with c4:
             g = g_cie10(df_f, FC)
             if g: st.plotly_chart(g, use_container_width=True)
-
         c5, c6 = st.columns(2)
         with c5:
             g = g_top5(df_f, FI)
@@ -97,7 +101,6 @@ with t1:
         with c6:
             g = g_tendencia(df_f, FF)
             if g: st.plotly_chart(g, use_container_width=True)
-
         c7, c8 = st.columns(2)
         with c7:
             g = g_agente(df_f, FAG)
@@ -105,7 +108,6 @@ with t1:
         with c8:
             g = g_cuerpo(df_f, FCU)
             if g: st.plotly_chart(g, use_container_width=True)
-
         c9, c10 = st.columns(2)
         with c9:
             g = g_naturaleza(df_f, FNA)
@@ -113,7 +115,6 @@ with t1:
         with c10:
             g = g_estado(df_f, FE)
             if g: st.plotly_chart(g, use_container_width=True)
-
         st.markdown(f"<h3 style='color:#0D6EFD;'>💡 Recomendaciones IA</h3>", unsafe_allow_html=True)
         if st.button("🎯 Generar Recomendaciones", use_container_width=True):
             with st.spinner("Analizando..."):
@@ -146,7 +147,7 @@ with t2:
         st.markdown("#### 📋 Consulta Completa")
         cb, cbtn = st.columns([3, 1])
         with cb:
-            bus = st.text_input("Búsqueda completa por identificación", placeholder="Ej: 1234567890", key="bc")
+            bus = st.text_input("Búsqueda completa", placeholder="Ej: 1234567890", key="bc")
         with cbtn:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🔎 Buscar", use_container_width=True):
@@ -198,9 +199,8 @@ if es_admin():
     with t4:
         st.markdown("<h2 style='color:#0D6EFD;'>⚙️ Panel de Administración</h2>", unsafe_allow_html=True)
         st.markdown("---")
-
         st.markdown("#### 📁 Cargar Archivo Excel")
-        st.markdown("<p style='color:#6C757D;'>Sube el archivo CARACTERIZACION ACCIDENTALIDAD.xlsx con las hojas FORMATO y BASE DATOS.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#6C757D;'>Sube CARACTERIZACION ACCIDENTALIDAD.xlsx con hojas FORMATO y BASE DATOS.</p>", unsafe_allow_html=True)
         archivo = st.file_uploader("Seleccionar archivo Excel", type=["xlsx"], key="up_admin", label_visibility="collapsed")
         if archivo:
             try:
@@ -220,7 +220,6 @@ if es_admin():
                         st.error(msg)
             except Exception as e:
                 st.error(f"❌ Error al leer el archivo: {e}")
-
         st.markdown("---")
         col_r1, col_r2 = st.columns(2)
         with col_r1:
@@ -239,7 +238,6 @@ if es_admin():
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ {e}")
-
         st.markdown("---")
         st.markdown("#### 📊 Resumen de Datos Cargados")
         rc1, rc2 = st.columns(2)
@@ -247,7 +245,6 @@ if es_admin():
             st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;border:1px solid #DEE2E6;text-align:center;'><div style='font-size:28px;font-weight:bold;color:#0D6EFD;'>{len(df_f)}</div><div style='color:#6C757D;'>Eventos en FORMATO</div></div>", unsafe_allow_html=True)
         with rc2:
             st.markdown(f"<div style='background:#F8F9FA;padding:20px;border-radius:10px;border:1px solid #DEE2E6;text-align:center;'><div style='font-size:28px;font-weight:bold;color:#198754;'>{len(df_b)}</div><div style='color:#6C757D;'>Trabajadores en BASE DATOS</div></div>", unsafe_allow_html=True)
-
         st.markdown("---")
         if not df_f.empty:
             s1, s2 = st.tabs(["📝 Formato", "👥 Base Datos"])
