@@ -22,7 +22,6 @@ st.markdown("""<style>
 .block-container{padding-top:2rem;max-width:1400px;}
 </style>""", unsafe_allow_html=True)
 
-# ═══ FUNCIÓN: Detectar encabezados automáticamente ═══
 def leer_hoja(xl, hoja, columnas_clave):
     df_raw = pd.read_excel(xl, hoja, header=None)
     fila_h = 0
@@ -214,18 +213,14 @@ if es_admin():
         st.markdown("<h2 style='color:#0D6EFD;'>⚙️ Panel de Administración</h2>", unsafe_allow_html=True)
         st.markdown("---")
         st.markdown("#### 📁 Cargar Archivo Excel")
-        st.markdown("<p style='color:#6C757D;'>La app detecta automáticamente los encabezados, sin importar en qué fila estén.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#6C757D;'>La app detecta automáticamente los encabezados.</p>", unsafe_allow_html=True)
         archivo = st.file_uploader("Seleccionar archivo Excel", type=["xlsx"], key="up_admin", label_visibility="collapsed")
-        if archivo:
+        if archivo and not st.session_state.get("_cargado"):
             try:
                 xl = pd.ExcelFile(archivo)
-                # Detectar encabezados automáticamente
                 nf = leer_hoja(xl, "FORMATO", ["FECHA DEL EVENTO", "IDENTIFICACION", "TIPO DE EVENTO", "CIE 10", "CARGO"]) if "FORMATO" in xl.sheet_names else pd.DataFrame()
                 nb = leer_hoja(xl, "BASE DATOS", ["IDENTIFICACION", "CARGO", "EPS", "AFP", "APELLIDOS"]) if "BASE DATOS" in xl.sheet_names else pd.DataFrame()
-
-                # Mostrar qué encontró
-                st.markdown(f"<div style='background:#F8F9FA;padding:12px;border-radius:8px;border:1px solid #DEE2E6;font-size:13px;color:#6C757D;'>📋 FORMATO: <b>{len(nf)}</b> filas, <b>{len(nf.columns)}</b> columnas encontradas<br>📋 BASE DATOS: <b>{len(nb)}</b> filas, <b>{len(nb.columns)}</b> columnas encontradas</div>", unsafe_allow_html=True)
-
+                st.markdown(f"<div style='background:#F8F9FA;padding:12px;border-radius:8px;border:1px solid #DEE2E6;font-size:13px;color:#6C757D;'>📋 FORMATO: <b>{len(nf)}</b> filas, <b>{len(nf.columns)}</b> columnas<br>📋 BASE DATOS: <b>{len(nb)}</b> filas, <b>{len(nb.columns)}</b> columnas</div>", unsafe_allow_html=True)
                 if nf.empty and nb.empty:
                     st.error("❌ No se encontraron las hojas o los encabezados no coinciden")
                 else:
@@ -233,12 +228,15 @@ if es_admin():
                         ok, msg = guardar_datos(nf, nb)
                     if ok:
                         st.success(msg)
+                        st.session_state["_cargado"] = True
                         st.session_state.df_f, st.session_state.df_b = cargar_datos()
                         st.rerun()
                     else:
                         st.error(msg)
             except Exception as e:
                 st.error(f"❌ Error al leer el archivo: {e}")
+        if not archivo:
+            st.session_state["_cargado"] = False
         st.markdown("---")
         col_r1, col_r2 = st.columns(2)
         with col_r1:
