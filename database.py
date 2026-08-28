@@ -55,7 +55,10 @@ def get_supa():
 def safe_val(v):
     if pd.isna(v): return None
     if isinstance(v, (date, datetime)): return str(v)
-    if isinstance(v, time): return str(v)
+    if isinstance(v, time) and not isinstance(v, datetime):
+        s = str(v)
+        if s == "00:00:00": return None
+        return s
     if hasattr(v, 'item'): v = v.item()
     if isinstance(v, str) and v.strip().lower() in ("none", "nan", "", "nat", "na", "sin dato"): return None
     if isinstance(v, float) and v == int(v): return int(v)
