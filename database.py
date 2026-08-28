@@ -56,18 +56,27 @@ def safe_val(v):
     if pd.isna(v): return None
     if isinstance(v, (date, datetime)): return str(v)
     if isinstance(v, time): return str(v)
-    if hasattr(v, 'item'): return v.item()
-    if isinstance(v, str) and v.strip().lower() in ("none", "nan", ""): return None
+    if hasattr(v, 'item'): v = v.item()
+    if isinstance(v, str) and v.strip().lower() in ("none", "nan", "", "nat"): return None
     return v
 
 def limpiar_filas(df, col_id, col_fecha=None):
-    """Elimina filas donde la identificación sea None/nan/vacía"""
+    """Elimina filas donde identificación sea None/nan/vacía"""
     if col_id and col_id in df.columns:
         s = df[col_id].astype(str).str.strip().str.lower()
-        df = df[s.notna() & (s != "none") & (s != "nan") & (s != "")]
+        df = df[s.notna() & (s != "none") & (s != "nan") & (s != "nat") & (s != "")]
     if col_fecha and col_fecha in df.columns:
         df = df[df[col_fecha].notna()]
     return df
+
+def preparar_batch(df, cols_validas):
+    """Convierte DataFrame a lista de diccionarios limpios"""
+    lote = []
+    cols = [c for c in df.columns if c in cols_validas]
+    for _, row in df[cols].iterrows():
+        d = {k: safe_val(v) for k, v in row.items()}
+        lote.append(d)
+    return lote
 
 def cargar_datos():
     supa = get_supa()
@@ -88,33 +97,46 @@ def guardar_datos(df_f, df_b):
     supa = get_supa()
     if not supa: return False, "Sin credenciales Supabase"
     try:
+        # Limpiar espacios en nombres de columna
         df_f = df_f.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
         df_b = df_b.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
+
+        # Mapear a nombres SQL
         df_fs = df_f.rename(columns=MAP_F_INV)
         df_bs = df_b.rename(columns=MAP_B_INV)
-        # Eliminar filas None/inválidas
+
+        # ELIMINAR filas None/inválidas
         df_fs = limpiar_filas(df_fs, "identificacion", "fecha_evento")
         df_bs = limpiar_filas(df_bs, "identificacion")
-        # Eliminar duplicados por (fecha, identificacion)
+
+        # Eliminar duplicados
+        dup_f = 0
         if "fecha_evento" in df_fs.columns and "identificacion" in df_fs.columns:
             antes = len(df_fs)
             df_fs = df_fs.drop_duplicates(subset=["fecha_evento", "identificacion"], keep="last")
-            dup = antes - len(df_fs)
-        else:
-            dup = 0
-        # También limpiar duplicados en base_datos por identificacion
+            dup_f = antes - len(df_fs)
+        dup_b = 0
         if "identificacion" in df_bs.columns:
+            antes = len(df_bs)
             df_bs = df_bs.drop_duplicates(subset=["identificacion"], keep="last")
-        cols_f = [c for c in df_fs.columns if c in SQL_F]
-        cols_b = [c for c in df_bs.columns if c in SQL_B]
-        for _, row in df_fs[cols_f].iterrows():
-            d = {k: safe_val(v) for k, v in row.items()}
-            supa.table("formato").upsert(d, on_conflict="fecha_evento,identificacion").execute()
-        for _, row in df_bs[cols_b].iterrows():
-            d = {k: safe_val(v) for k, v in row.items()}
-            supa.table("base_datos").upsert(d).execute()
-        msg = f"✅ {len(df_fs)} eventos + {len(df_bs)} trabajadores"
-        if dup > 0: msg += f" ({dup} duplicados omitidos)"
+            dup_b = antes - len(df_bs)
+
+        # Preparar lotes
+        lote_f = preparar_batch(df_fs, SQL_F)
+        lote_b = preparar_batch(df_bs, SQL_B)
+
+        # INSERTAR POR LOTES (chunk de 500) — rápido
+        CHUNK = 500
+        for i in range(0, len(lote_f), CHUNK):
+            supa.table("formato").upsert(lote_f[i:i+CHUNK], on_conflict="fecha_evento,identificacion").execute()
+        for i in range(0, len(lote_b), CHUNK):
+            supa.table("base_datos").upsert(lote_b[i:i+CHUNK]).execute()
+
+        msg = f"✅ {len(lote_f)} eventos + {len(lote_b)} trabajadores"
+        extras = []
+        if dup_f > 0: extras.append(f"{dup_f} dup. formato")
+        if dup_b > 0: extras.append(f"{dup_b} dup. base datos")
+        if extras: msg += f" ({', '.join(extras)} omitidos)"
         return True, msg
     except Exception as e:
         return False, f"❌ Error: {str(e)}"
