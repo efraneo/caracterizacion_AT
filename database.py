@@ -150,3 +150,29 @@ def guardar_datos(df_f, df_b):
         return True, msg
     except Exception as e:
         return False, f"❌ Error: {str(e)}"
+
+def purgar_duplicados():
+    supa = get_supa()
+    if not supa: return False, "Sin credenciales"
+    try:
+        elim_f = 0
+        rf = supa.table("formato").select("id","fecha_evento","identificacion").order("id").execute()
+        if rf.data:
+            df = pd.DataFrame(rf.data)
+            ids = df[df.duplicated(subset=["fecha_evento","identificacion"], keep="last")]["id"].tolist()
+            elim_f = len(ids)
+            if ids:
+                for i in range(0, len(ids), 100):
+                    supa.table("formato").delete().in_("id", ids[i:i+100]).execute()
+        elim_b = 0
+        rb = supa.table("base_datos").select("id","identificacion").order("id").execute()
+        if rb.data:
+            df = pd.DataFrame(rb.data)
+            ids = df[df.duplicated(subset=["identificacion"], keep="last")]["id"].tolist()
+            elim_b = len(ids)
+            if ids:
+                for i in range(0, len(ids), 100):
+                    supa.table("base_datos").delete().in_("id", ids[i:i+100]).execute()
+        return True, f"✅ {elim_f} dup. eventos + {elim_b} dup. trabajadores eliminados"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)}"
