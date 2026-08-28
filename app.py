@@ -38,11 +38,16 @@ def leer_hoja(xl, hoja, columnas_clave):
     return df
 
 def bc(df, opciones):
-    """Busca columna flexible por coincidencia parcial"""
+    def _n(s):
+        return str(s).upper().replace("Á","A").replace("É","E").replace("Í","I").replace("Ó","O").replace("Ú","U").replace("Ñ","N")
+    cols = {_n(c): c for c in df.columns}
     for op in opciones:
-        for c in df.columns:
-            if op.upper() in str(c).upper():
-                return c
+        n = _n(op)
+        if n in cols:
+            return cols[n]
+        for cn, co in cols.items():
+            if n in cn or cn in n:
+                return co
     return None
 
 if not verificar_login():
