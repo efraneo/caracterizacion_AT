@@ -27,8 +27,8 @@ def leer_hoja(xl, hoja, columnas_clave):
     df_raw = pd.read_excel(xl, hoja, header=None)
     fila_h = 0
     for i in range(min(15, len(df_raw))):
-        fila = df_raw.iloc[i].astype(str).str.strip().str.upper()
-        coincidencias = sum(1 for c in columnas_clave if any(c in v for v in fila.values))
+        valores = [str(v).strip().upper() for v in df_raw.iloc[i].values]
+        coincidencias = sum(1 for c in columnas_clave if any(c in v for v in valores))
         if coincidencias >= 3:
             fila_h = i
             break
