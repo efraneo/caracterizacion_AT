@@ -57,7 +57,8 @@ def safe_val(v):
     if isinstance(v, (date, datetime)): return str(v)
     if isinstance(v, time): return str(v)
     if hasattr(v, 'item'): v = v.item()
-    if isinstance(v, str) and v.strip().lower() in ("none", "nan", "", "nat", "sin dato", "na"): return None
+    if isinstance(v, str) and v.strip().lower() in ("none", "nan", "", "nat", "na", "sin dato"): return None
+    if isinstance(v, float) and v == int(v): return int(v)
     return v
 
 def limpiar_filas(df, col_id, col_fecha=None):
