@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 from datetime import date, time, datetime
 from supabase import create_client
 
@@ -45,14 +46,22 @@ SQL_F = set(MAP_F.keys())
 SQL_B = set(MAP_B.keys())
 
 def _n(s):
-    return str(s).upper().replace("Á","A").replace("É","E").replace("Í","I").replace("Ó","O").replace("Ú","U").replace("Ñ","N")
+    return str(s).upper().replace("Á","A").replace("É","E").replace("Í","I").replace("Ó","O").replace("Ú","U").replace("Ñ","N").replace("-"," ").replace("."," ")
+
+def _sin_parens(s):
+    return re.sub(r'\(.*?\)', '', s).strip()
 
 def buscar_mapeo(col_excel, mapeo):
     cn = _n(col_excel)
+    cn_sp = _sin_parens(cn)
     for k, v in mapeo.items():
-        if _n(k) == cn or cn in _n(k) or _n(k) in cn:
+        kn = _n(k)
+        if kn == cn or kn == cn_sp:
             return v
-    return cn.lower().replace(" ","_").replace("/","_").replace("(","").replace(")","")
+        kn_sp = _sin_parens(kn)
+        if kn_sp == cn or kn_sp == cn_sp:
+            return v
+    return None
 
 def renombrar_inv(df, mapeo):
     return df.rename(columns=lambda c: buscar_mapeo(c, mapeo))
@@ -61,8 +70,11 @@ def renombrar_directo(df, mapeo):
     nuevo = {}
     for c in df.columns:
         cn = _n(c)
+        cn_sp = _sin_parens(cn)
         for k, v in mapeo.items():
-            if _n(k) == cn:
+            kn = _n(k)
+            kn_sp = _sin_parens(kn)
+            if kn == cn or kn == cn_sp or kn_sp == cn or kn_sp == cn_sp:
                 nuevo[c] = v
                 break
         if c not in nuevo:
@@ -107,10 +119,8 @@ def purgar_silent(supa):
                     vals = [str(r.get(c,"")).strip() for c in cols]
                     if all(v and v != "None" for v in vals):
                         clave = tuple(vals)
-                        if clave in vistos:
-                            elim.append(r["id"])
-                        else:
-                            vistos[clave] = r["id"]
+                        if clave in vistos: elim.append(r["id"])
+                        else: vistos[clave] = r["id"]
                 for j in range(0, len(elim), 100):
                     supa.table(tabla).delete().in_("id", elim[j:j+100]).execute()
     except Exception:
@@ -130,10 +140,8 @@ def purgar_duplicados():
                     vals = [str(r.get(c,"")).strip() for c in cols]
                     if all(v and v != "None" for v in vals):
                         clave = tuple(vals)
-                        if clave in vistos:
-                            elim.append(r["id"])
-                        else:
-                            vistos[clave] = r["id"]
+                        if clave in vistos: elim.append(r["id"])
+                        else: vistos[clave] = r["id"]
                 for j in range(0, len(elim), 100):
                     supa.table(tabla).delete().in_("id", elim[j:j+100]).execute()
                 total += len(elim)
@@ -158,19 +166,15 @@ def cargar_datos():
 
 def guardar_datos(df_f, df_b):
     supa = get_supa()
-    if not supa: return False, "Sin credenciales Supabase"
+    if not supa: return False, "Sin credenciales"
     try:
-        # PURGA AUTOMÁTICA antes de cargar
         purgar_silent(supa)
-        # Limpiar y mapear
         df_f = df_f.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
         df_b = df_b.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
         df_fs = renombrar_inv(df_f, MAP_F)
         df_bs = renombrar_inv(df_b, MAP_B)
-        # Limpiar filas inválidas
         df_fs = limpiar_filas(df_fs, "identificacion", "fecha_evento")
         df_bs = limpiar_filas(df_bs, "identificacion")
-        # Preparar lotes
         lote_f, lote_b = [], []
         for _, row in df_fs.iterrows():
             d = {k: safe_val(v) for k, v in row.items() if k in SQL_F}
@@ -178,7 +182,6 @@ def guardar_datos(df_f, df_b):
         for _, row in df_bs.iterrows():
             d = {k: safe_val(v) for k, v in row.items() if k in SQL_B}
             if any(v is not None for v in d.values()): lote_b.append(d)
-        # Insertar por lotes
         CHUNK = 500
         if lote_f:
             for i in range(0, len(lote_f), CHUNK):
@@ -186,7 +189,6 @@ def guardar_datos(df_f, df_b):
         if lote_b:
             for i in range(0, len(lote_b), CHUNK):
                 supa.table("base_datos").upsert(lote_b[i:i+CHUNK]).execute()
-        msg = f"✅ {len(lote_f)} eventos + {len(lote_b)} trabajadores guardados"
-        return True, msg
+        return True, f"✅ {len(lote_f)} eventos + {len(lote_b)} trabajadores guardados"
     except Exception as e:
         return False, f"❌ Error: {str(e)}"
